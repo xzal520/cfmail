@@ -8645,6 +8645,69 @@ adminRouter.get("/users", async (c) => {
     }
   });
 });
+adminRouter.post("/users", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { username, password, domainId, mailboxPrefix, role, quotaMb } = body;
+    if (!username || !password) {
+      return c.json({ success: false, error: "\u7528\u6237\u540D\u548C\u5BC6\u7801\u4E0D\u80FD\u4E3A\u7A7A" }, 400);
+    }
+    if (username.length < 3 || username.length > 30) {
+      return c.json({ success: false, error: "\u7528\u6237\u540D\u957F\u5EA6\u9700\u5728 3 \u5230 30 \u4E2A\u5B57\u7B26\u4E4B\u95F4" }, 400);
+    }
+    if (password.length < 6) {
+      return c.json({ success: false, error: "\u5BC6\u7801\u957F\u5EA6\u81F3\u5C11\u9700 6 \u4E2A\u5B57\u7B26" }, 400);
+    }
+    const existingUser = await c.env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(username.toLowerCase()).first();
+    if (existingUser) {
+      return c.json({ success: false, error: "\u8BE5\u7528\u6237\u540D\u5DF2\u5B58\u5728" }, 400);
+    }
+    let targetDomain = null;
+    if (domainId) {
+      targetDomain = await c.env.DB.prepare("SELECT * FROM domains WHERE id = ? AND is_active = 1").bind(domainId).first();
+    } else {
+      targetDomain = await c.env.DB.prepare("SELECT * FROM domains WHERE is_active = 1 ORDER BY is_default DESC, created_at ASC LIMIT 1").first();
+    }
+    const prefix = (mailboxPrefix || username).trim().toLowerCase();
+    if (!/^[a-zA-Z0-9._-]+$/.test(prefix)) {
+      return c.json({ success: false, error: "\u90AE\u7BB1\u524D\u7F00\u53EA\u5141\u8BB8\u5B57\u6BCD\u3001\u6570\u5B57\u3001\u70B9\u3001\u4E0B\u5212\u7EBF\u53CA\u51CF\u53F7" }, 400);
+    }
+    const domainName = targetDomain ? targetDomain.domain_name : "localhost";
+    const emailAddress = `${prefix}@${domainName}`.toLowerCase();
+    const existingMailbox = await c.env.DB.prepare("SELECT id FROM mailboxes WHERE LOWER(address) = ?").bind(emailAddress).first();
+    if (existingMailbox) {
+      return c.json({ success: false, error: `\u90AE\u7BB1\u5730\u5740 ${emailAddress} \u5DF2\u88AB\u5360\u7528` }, 400);
+    }
+    const userId = generateId();
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(password, salt);
+    const now = currentTimestamp();
+    const mb = parseInt(quotaMb || "500", 10);
+    const quotaBytes = (isNaN(mb) ? 500 : mb) * 1024 * 1024;
+    const userRole = role === "admin" ? "admin" : "user";
+    await c.env.DB.prepare(`
+      INSERT INTO users (id, username, password_hash, salt, role, is_active, quota_bytes, used_bytes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, 0, ?, ?)
+    `).bind(userId, username.toLowerCase(), passwordHash, salt, userRole, quotaBytes, now, now).run();
+    const mailboxId = generateId();
+    await c.env.DB.prepare(`
+      INSERT INTO mailboxes (id, user_id, address, domain_id, name, is_primary, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+    `).bind(mailboxId, userId, emailAddress, targetDomain ? targetDomain.id : null, username, now).run();
+    return c.json({
+      success: true,
+      message: "\u7528\u6237\u521B\u5EFA\u6210\u529F",
+      data: {
+        id: userId,
+        username,
+        role: userRole,
+        primaryEmail: emailAddress
+      }
+    });
+  } catch (err) {
+    return c.json({ success: false, error: err instanceof Error ? err.message : "\u521B\u5EFA\u7528\u6237\u5931\u8D25" }, 500);
+  }
+});
 adminRouter.patch("/users/:id/status", async (c) => {
   const admin = c.get("user");
   const targetId = c.req.param("id");

@@ -44,6 +44,16 @@ export const AdminView: React.FC = () => {
   const [quotaModal, setQuotaModal] = useState<{ userId: string; username: string; currentMb: number } | null>(null);
   const [newQuotaMb, setNewQuotaMb] = useState<number>(500);
 
+  // 新增用户模态框状态
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserPrefix, setNewUserPrefix] = useState('');
+  const [newUserDomainId, setNewUserDomainId] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
+  const [newUserQuotaMb, setNewUserQuotaMb] = useState<number>(500);
+  const [addingUser, setAddingUser] = useState(false);
+
   // 4. 系统设置与测试发信
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [testEmailAddr, setTestEmailAddr] = useState('');
@@ -200,6 +210,49 @@ export const AdminView: React.FC = () => {
       setNewPasswordForUser('');
     } catch (err: unknown) {
       showMsg(err instanceof Error ? err.message : '重置失败', 'error');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, username: string) => {
+    if (!confirm(`确定要彻底删除用户【${username}】吗？\n该用户名下的所有邮箱别名和收发邮件将全部被永久清除！此操作不可逆！`)) {
+      return;
+    }
+    try {
+      await request(`/admin/users/${userId}`, { method: 'DELETE' });
+      showMsg(`用户【${username}】已彻底删除`);
+      loadUsers();
+      loadOverview();
+    } catch (err: unknown) {
+      showMsg(err instanceof Error ? err.message : '删除用户失败', 'error');
+    }
+  };
+
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingUser(true);
+    try {
+      await request('/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: newUsername,
+          password: newUserPassword,
+          mailboxPrefix: newUserPrefix || newUsername,
+          domainId: newUserDomainId || undefined,
+          role: newUserRole,
+          quotaMb: newUserQuotaMb,
+        }),
+      });
+      showMsg(`用户【${newUsername}】已成功创建！`);
+      setShowAddUserModal(false);
+      setNewUsername('');
+      setNewUserPassword('');
+      setNewUserPrefix('');
+      loadUsers();
+      loadOverview();
+    } catch (err: unknown) {
+      showMsg(err instanceof Error ? err.message : '创建用户失败', 'error');
+    } finally {
+      setAddingUser(false);
     }
   };
 
@@ -554,13 +607,27 @@ export const AdminView: React.FC = () => {
                   className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <button
-                onClick={loadUsers}
-                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>刷新</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    if (domains.length > 0 && !newUserDomainId) {
+                      setNewUserDomainId(domains[0].id);
+                    }
+                    setShowAddUserModal(true);
+                  }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>新增用户</span>
+                </button>
+                <button
+                  onClick={loadUsers}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>刷新</span>
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -607,7 +674,7 @@ export const AdminView: React.FC = () => {
                           {u.is_active === 1 ? '正常' : '已禁用'}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right space-x-1.5">
+                      <td className="p-3.5 text-right space-x-1">
                         <button
                           onClick={() => {
                             setQuotaModal({
@@ -639,11 +706,18 @@ export const AdminView: React.FC = () => {
                           onClick={() => handleToggleUserStatus(u.id, u.is_active)}
                           className={`px-2 py-1 rounded ${
                             u.is_active === 1
-                              ? 'text-rose-600 hover:bg-rose-50'
+                              ? 'text-amber-600 hover:bg-amber-50'
                               : 'text-emerald-600 hover:bg-emerald-50'
                           }`}
                         >
                           {u.is_active === 1 ? '禁用' : '解禁'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(u.id, u.username)}
+                          className="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded font-semibold"
+                          title="彻底删除用户"
+                        >
+                          删除
                         </button>
                       </td>
                     </tr>
@@ -1000,6 +1074,117 @@ export const AdminView: React.FC = () => {
                   className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm"
                 >
                   保存配额
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 新增用户模态框 */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-slate-800 mb-1 flex items-center space-x-2">
+              <Plus className="w-5 h-5 text-blue-600" />
+              <span>管理员新增用户</span>
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              为系统创建新的用户账号并自动分配主邮箱别名。
+            </p>
+
+            <form onSubmit={handleAddUser} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">用户账号 (Username)</label>
+                <input
+                  type="text"
+                  required
+                  value={newUsername}
+                  onChange={(e) => {
+                    setNewUsername(e.target.value);
+                    if (!newUserPrefix) setNewUserPrefix(e.target.value);
+                  }}
+                  placeholder="3-30个英文字母或数字"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">初始登录密码</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  placeholder="至少 6 位字符"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">分配邮箱地址</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={newUserPrefix || newUsername}
+                    onChange={(e) => setNewUserPrefix(e.target.value)}
+                    placeholder="前缀"
+                    className="w-1/2 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={newUserDomainId}
+                    onChange={(e) => setNewUserDomainId(e.target.value)}
+                    className="w-1/2 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 truncate"
+                  >
+                    {domains.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        @{d.domain_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">用户角色</label>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value as 'user' | 'admin')}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="user">普通用户</option>
+                    <option value="admin">系统管理员</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">初始配额 (MB)</label>
+                  <input
+                    type="number"
+                    min={10}
+                    value={newUserQuotaMb}
+                    onChange={(e) => setNewQuotaMb(parseInt(e.target.value, 10))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUserModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingUser}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-sm shadow-blue-500/20"
+                >
+                  {addingUser ? '创建中...' : '立即创建用户'}
                 </button>
               </div>
             </form>

@@ -262,6 +262,96 @@ adminRouter.get('/users', async (c) => {
 });
 
 /**
+ * 管理员新增用户
+ */
+adminRouter.post('/users', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { username, password, domainId, mailboxPrefix, role, quotaMb } = body;
+
+    if (!username || !password) {
+      return c.json({ success: false, error: '用户名和密码不能为空' }, 400);
+    }
+    if (username.length < 3 || username.length > 30) {
+      return c.json({ success: false, error: '用户名长度需在 3 到 30 个字符之间' }, 400);
+    }
+    if (password.length < 6) {
+      return c.json({ success: false, error: '密码长度至少需 6 个字符' }, 400);
+    }
+
+    // 检查用户名
+    const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?')
+      .bind(username.toLowerCase())
+      .first();
+    if (existingUser) {
+      return c.json({ success: false, error: '该用户名已存在' }, 400);
+    }
+
+    // 查找目标域名
+    let targetDomain: Domain | null = null;
+    if (domainId) {
+      targetDomain = await c.env.DB.prepare('SELECT * FROM domains WHERE id = ? AND is_active = 1')
+        .bind(domainId)
+        .first<Domain>();
+    } else {
+      targetDomain = await c.env.DB.prepare('SELECT * FROM domains WHERE is_active = 1 ORDER BY is_default DESC, created_at ASC LIMIT 1')
+        .first<Domain>();
+    }
+
+    const prefix = (mailboxPrefix || username).trim().toLowerCase();
+    if (!/^[a-zA-Z0-9._-]+$/.test(prefix)) {
+      return c.json({ success: false, error: '邮箱前缀只允许字母、数字、点、下划线及减号' }, 400);
+    }
+
+    const domainName = targetDomain ? targetDomain.domain_name : 'localhost';
+    const emailAddress = `${prefix}@${domainName}`.toLowerCase();
+
+    const existingMailbox = await c.env.DB.prepare('SELECT id FROM mailboxes WHERE LOWER(address) = ?')
+      .bind(emailAddress)
+      .first();
+    if (existingMailbox) {
+      return c.json({ success: false, error: `邮箱地址 ${emailAddress} 已被占用` }, 400);
+    }
+
+    const userId = generateId();
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(password, salt);
+    const now = currentTimestamp();
+    const mb = parseInt(quotaMb || '500', 10);
+    const quotaBytes = (isNaN(mb) ? 500 : mb) * 1024 * 1024;
+    const userRole = role === 'admin' ? 'admin' : 'user';
+
+    await c.env.DB.prepare(`
+      INSERT INTO users (id, username, password_hash, salt, role, is_active, quota_bytes, used_bytes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, 0, ?, ?)
+    `)
+      .bind(userId, username.toLowerCase(), passwordHash, salt, userRole, quotaBytes, now, now)
+      .run();
+
+    const mailboxId = generateId();
+    await c.env.DB.prepare(`
+      INSERT INTO mailboxes (id, user_id, address, domain_id, name, is_primary, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, 1, 1, ?)
+    `)
+      .bind(mailboxId, userId, emailAddress, targetDomain ? targetDomain.id : null, username, now)
+      .run();
+
+    return c.json({
+      success: true,
+      message: '用户创建成功',
+      data: {
+        id: userId,
+        username,
+        role: userRole,
+        primaryEmail: emailAddress,
+      },
+    });
+  } catch (err: unknown) {
+    return c.json({ success: false, error: err instanceof Error ? err.message : '创建用户失败' }, 500);
+  }
+});
+
+/**
  * 切换用户状态（启用/禁用）
  */
 adminRouter.patch('/users/:id/status', async (c) => {
