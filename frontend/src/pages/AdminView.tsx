@@ -85,8 +85,12 @@ export const AdminView: React.FC = () => {
     try {
       const data = await request<DomainItem[]>('/admin/domains');
       setDomains(data || []);
+      if (data && data.length > 0) {
+        const defaultDom = data.find(d => d.is_default) || data[0];
+        setNewUserDomainId(prev => prev || defaultDom.id);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load domains in admin:', e);
     }
   }, []);
 
@@ -118,10 +122,18 @@ export const AdminView: React.FC = () => {
     }
   }, []);
 
+  // 初始挂载时始终加载一次域名列表
+  useEffect(() => {
+    loadDomains();
+  }, [loadDomains]);
+
   useEffect(() => {
     if (activeTab === 'overview') loadOverview();
     if (activeTab === 'domains') loadDomains();
-    if (activeTab === 'users') loadUsers();
+    if (activeTab === 'users') {
+      loadUsers();
+      loadDomains(); // 切换到用户管理时也确保域名数据存在
+    }
     if (activeTab === 'settings') loadSettings();
     if (activeTab === 'logs') loadLogs();
   }, [activeTab, loadOverview, loadDomains, loadUsers, loadSettings, loadLogs]);
@@ -610,9 +622,7 @@ export const AdminView: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => {
-                    if (domains.length > 0 && !newUserDomainId) {
-                      setNewUserDomainId(domains[0].id);
-                    }
+                    loadDomains();
                     setShowAddUserModal(true);
                   }}
                   className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all"
@@ -1137,11 +1147,15 @@ export const AdminView: React.FC = () => {
                     onChange={(e) => setNewUserDomainId(e.target.value)}
                     className="w-1/2 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 truncate"
                   >
-                    {domains.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        @{d.domain_name}
-                      </option>
-                    ))}
+                    {domains.length > 0 ? (
+                      domains.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          @{d.domain_name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="domain_00571_top">@00571.top</option>
+                    )}
                   </select>
                 </div>
               </div>
