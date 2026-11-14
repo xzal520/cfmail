@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cfmail",
+  "main": "src/index.ts",
+  "account_id": "2d0e2b80f45dc7f79cec87d101b8ab08",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cfmail_db",
+      "database_id": "9f800bb1-3a6d-45de-a500-fa606bdda356"
+    }
+  ],
+  "vars": {
+    "JWT_SECRET": "cfmail_super_secret_jwt_key_2026",
+    "ADMIN_INVITE_CODE": "admin888"
+  }
+}

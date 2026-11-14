@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Mail - Cloudflare 网页控制台手动部署全流程保姆级教程</title>
+  <style>
+    :root {
+      --primary: #f6821f;
+      --primary-dark: #e06c00;
+      --secondary: #2563eb;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 0;
+    }
+    /* 顶部导航 */
+    .header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      color: #fff;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      border-bottom: 4px solid var(--primary);
+    }
+    .header-badge {
+      display: inline-block;
+      background: rgba(246, 130, 31, 0.2);
+      color: var(--primary);
+      border: 1px solid rgba(246, 130, 31, 0.4);
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+    .header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+    }
+    .header p {
+      color: #94a3b8;
+      font-size: 1.05rem;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    /* 主体容器 */
+    .container {
+      max-width: 960px;
+      margin: -2rem auto 4rem auto;
+      padding: 0 1.25rem;
+    }
+    /* 步骤卡片 */
+    .step-card {
+      background: var(--card-bg);
+      border-radius: 1.25rem;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.95rem;
+      padding: 0.35rem 1rem;
+      border-radius: 9999px;
+      margin-bottom: 1rem;
+    }
+    .step-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .step-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.25rem;
+    }
+    /* 流程图架构卡片 */
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+      text-align: center;
+    }
+    .flow-item {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.75rem;
+      padding: 1rem 0.5rem;
+    }
+    .flow-num {
+      width: 24px;
+      height: 24px;
+      background: var(--secondary);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 0.5rem auto;
+    }
+    .flow-title {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #0f172a;
+    }
+    .flow-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    /* 高亮提醒框 */
+    .alert-box {
+      background: #eff6ff;
+      border-left: 4px solid var(--secondary);
+      padding: 1rem 1.25rem;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      color: #1e40af;
+      margin: 1.25rem 0;
+      line-height: 1.5;
+    }
+    .alert-warning {
+      background: #fffbeb;
+      border-left-color: #f59e0b;
+      color: #b45309;
+    }
+    .alert-success {
+      background: #ecfdf5;
+      border-left-color: #10b981;
+      color: #065f46;
+    }
+    /* 操作步骤列表 */
+    ol.action-list {
+      padding-left: 1.25rem;
+      margin: 1rem 0;
+    }
+    ol.action-list li {
+      margin-bottom: 0.85rem;
+      font-size: 0.95rem;
+      color: #334155;
+    }
+    ol.action-list li strong {
+      color: #0f172a;
+    }
+    /* 代码展示与复制 */
+    .code-wrapper {
+      position: relative;
+      background: var(--code-bg);
+      border-radius: 0.75rem;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+    .code-header {
+      background: #1e293b;
+      padding: 0.5rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 0.35rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+    pre {
+      padding: 1rem;
+      color: var(--code-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      max-height: 380px;
+    }
+    /* 按钮与链接 */
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.25rem;
+      border-radius: 0.65rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: all 0.15s;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .tag {
+      background: #e2e8f0;
+      color: #334155;
+      padding: 0.15rem 0.45rem;
+      border-radius: 0.25rem;
+      font-size: 0.85rem;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 头部介绍 -->
+  <header class="header">
+    <div class="header-badge">Cloudflare 官方原生架构指南</div>
+    <h1>Cloud Mail 域名邮箱系统</h1>
+    <p>完全无需安装本地 Node.js 或命令行环境，只需在 Cloudflare 官方网页控制台点选鼠标即可快速部署全套系统！</p>
+  </header>
+
+  <main class="container">
+
+    <!-- 架构流程图 -->
+    <div class="step-card">
+      <h2 class="step-title">🌐 系统运作架构流程图</h2>
+      <p class="step-desc">该系统 100% 运行于 Cloudflare 全球边缘网络，零外部服务器，永久免维护。</p>
+      
+      <div class="flow-grid">
+        <div class="flow-item">
+          <div class="flow-num">1</div>
+          <div class="flow-title">外部发信</div>
+          <div class="flow-desc">发往 @00571.top</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-num">2</div>
+          <div class="flow-title">DNS / MX</div>
+          <div class="flow-desc">CF 边缘自动解析</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-num">3</div>
+          <div class="flow-title">Email Routing</div>
+          <div class="flow-desc">邮件捕获与触发</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-num">4</div>
+          <div class="flow-title">Worker 处理</div>
+          <div class="flow-desc">解析 MIME 正文附件</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-num">5</div>
+          <div class="flow-title">D1 数据库</div>
+          <div class="flow-desc">无服务器数据存储</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-num">6</div>
+          <div class="flow-title">Webmail 后台</div>
+          <div class="flow-desc">在线收发与管理</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第一步：创建并初始化 D1 数据库 -->
+    <div class="step-card">
+      <span class="step-badge">第一步</span>
+      <h2 class="step-title">创建并初始化 D1 数据库</h2>
+      <p class="step-desc">D1 是 Cloudflare 官方提供的无服务器 SQLite 数据库，用于存储用户、邮箱别名、收发的邮件与附件。</p>
+
+      <ol class="action-list">
+        <li>登录 <a href="https://dash.cloudflare.com/" target="_blank">Cloudflare 控制台</a>；</li>
+        <li>在左侧菜单栏中点击：<strong>存储和数据库 (Storage & Databases)</strong> ➔ <strong>D1 SQL 数据库</strong>；</li>
+        <li>点击蓝色的 <strong>「创建数据库 (Create database)」</strong> 按钮；</li>
+        <li>数据库名称填写：<span class="tag">cfmail_db</span>，点击 <strong>创建</strong>；</li>
+        <li>创建完成后，点击刚刚创建好的 <span class="tag">cfmail_db</span> 进入详情页，切换到顶部的 <strong>「控制台 (Console)」</strong> 标签页；</li>
+        <li>在控制台输入框中粘贴下方的建表 SQL 语句，点击右下角的 <strong>「执行 (Execute)」</strong> 按钮：</li>
+      </ol>
+
+      <div class="code-wrapper">
+        <div class="code-header">
+          <span>初始化建表 SQL (schema.sql)</span>
+          <button class="copy-btn" onclick="copyCode('sql-block')">复制代码</button>
+        </div>
+        <pre id="sql-block">-- 1. 用户表
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    quota_bytes INTEGER NOT NULL DEFAULT 524288000,
+    used_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+-- 2. 托管域名表
+CREATE TABLE IF NOT EXISTS domains (
+    id TEXT PRIMARY KEY,
+    domain_name TEXT UNIQUE NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    created_at INTEGER NOT NULL
+);
+
+-- 3. 邮箱别名表
+CREATE TABLE IF NOT EXISTS mailboxes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    address TEXT UNIQUE NOT NULL,
+    domain_id TEXT,
+    name TEXT,
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 4. 邮件核心表
+CREATE TABLE IF NOT EXISTS emails (
+    id TEXT PRIMARY KEY,
+    mailbox_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    message_id TEXT,
+    direction TEXT NOT NULL,
+    from_name TEXT,
+    from_address TEXT NOT NULL,
+    to_addresses TEXT NOT NULL,
+    cc_addresses TEXT,
+    bcc_addresses TEXT,
+    reply_to TEXT,
+    subject TEXT,
+    snippet TEXT,
+    body_text TEXT,
+    body_html TEXT,
+    raw_size INTEGER NOT NULL DEFAULT 0,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    is_starred INTEGER NOT NULL DEFAULT 0,
+    is_trash INTEGER NOT NULL DEFAULT 0,
+    is_spam INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+-- 5. 邮件附件表
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    email_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    storage_type TEXT NOT NULL DEFAULT 'd1_blob',
+    storage_key TEXT,
+    data_blob BLOB,
+    created_at INTEGER NOT NULL
+);
+
+-- 6. 全局系统配置表
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    description TEXT,
+    updated_at INTEGER NOT NULL
+);
+
+-- 7. 发信审计日志表
+CREATE TABLE IF NOT EXISTS send_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    from_address TEXT NOT NULL,
+    to_addresses TEXT NOT NULL,
+    subject TEXT,
+    channel TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error_message TEXT,
+    created_at INTEGER NOT NULL
+);
+
+-- 初始化默认数据
+INSERT OR IGNORE INTO settings (key, value, description, updated_at) VALUES 
+('allow_registration', 'true', '开放用户注册', unixepoch()),
+('default_quota_mb', '500', '默认空间', unixepoch()),
+('max_mailboxes_per_user', '5', '别名上限', unixepoch()),
+('send_channel', 'resend', '发信通道', unixepoch()),
+('resend_api_key', '', 'Resend API Key', unixepoch());
+
+-- 插入默认域名 00571.top
+INSERT OR IGNORE INTO domains (id, domain_name, is_active, is_default, description, created_at)
+VALUES ('domain_00571_top', '00571.top', 1, 1, '默认主域名', unixepoch());</pre>
+      </div>
+      <div class="alert-box alert-success">
+        执行完成后，D1 数据库即已成功建立所有表和索引！
+      </div>
+    </div>
+
+    <!-- 第二步：创建 Worker 服务并绑定 D1 -->
+    <div class="step-card">
+      <span class="step-badge">第二步</span>
+      <h2 class="step-title">创建 Worker 并绑定 D1 数据库</h2>
+      <p class="step-desc">Worker 是整个系统的核心引擎，负责提供 HTTP 接口、托管前端静态网页以及接收 Email Routing 路由投递过来的邮件。</p>
+
+      <ol class="action-list">
+        <li>在 Cloudflare 左侧菜单点击：<strong>计算和无服务器 (Compute / Workers & Pages)</strong> ➔ <strong>概述 (Overview)</strong>；</li>
+        <li>点击右上角蓝色的 <strong>「创建 (Create application)」</strong> ➔ 选择 <strong>Worker</strong>；</li>
+        <li>服务名称填入：<span class="tag">cfmail</span>，点击 <strong>「部署 (Deploy)」</strong>；</li>
+        <li>创建成功后，点击进入这个名为 <span class="tag">cfmail</span> 的 Worker 主页；</li>
+        <li>点击顶部的 <strong>「设置 (Settings)」</strong> 标签页：
+          <ul style="padding-left: 1.5rem; margin-top: 0.5rem; line-height: 1.8;">
+            <li>找到 <strong>「绑定 (Bindings)」</strong>（或“变量与机密”）区域，点击 <strong>「添加绑定 (Add)」</strong>；</li>
+            <li>选择 <strong>D1 数据库绑定</strong>；</li>
+            <li><strong>变量名称 (Variable name)</strong> 务必填：<span class="tag">DB</span>（必须大写）；</li>
+            <li><strong>D1 数据库</strong> 下拉选择在第一步创建的：<span class="tag">cfmail_db</span>；</li>
+            <li>点击 <strong>「保存并部署」</strong>！</li>
+          </ul>
+        </li>
+      </ol>
+      <div class="alert-box alert-warning">
+        ⚠️ <strong>关键提醒</strong>：变量名称必须一字不差填为大写的 <strong>DB</strong>，否则 Worker 代码将无法读取数据库。
+      </div>
+    </div>
+
+    <!-- 第三步：在线粘贴部署 Worker 代码 -->
+    <div class="step-card">
+      <span class="step-badge">第三步</span>
+      <h2 class="step-title">在网页编辑器中粘贴部署代码</h2>
+      <p class="step-desc">我们已为您将后端全部逻辑（包含 postal-mime MIME 邮件流式解析引擎、JWT 鉴权、RESTful API 以及 Webmail 前端页面）打包成了一个独立的单文件脚本。</p>
+
+      <ol class="action-list">
+        <li>在 <span class="tag">cfmail</span> 的 Worker 详情页右上角，点击 <strong>「编辑代码 (Edit code)」</strong>；</li>
+        <li>清空左侧代码编辑器中原有的默认代码；</li>
+        <li>打开项目根目录下的 <span class="tag">worker.bundle.js</span> 文件，全选并复制全部内容，粘贴到 Cloudflare 网页编辑器中；</li>
+        <li>点击右上角蓝色的 <strong>「保存并部署 (Save and deploy)」</strong> 按钮！</li>
+      </ol>
+      <div class="alert-box alert-success">
+        🎉 部署成功后，您就可以点击页面提供的 Worker 访问地址（如 <code>https://cfmail.your-name.workers.dev</code>），直接在浏览器中打开漂亮的 Webmail 界面了！
+      </div>
+    </div>
+
+    <!-- 第四步：在域名控制台打通 Email Routing 收信规则 -->
+    <div class="step-card">
+      <span class="step-badge">第四步</span>
+      <h2 class="step-title">配置域名 Email Routing 收信规则</h2>
+      <p class="step-desc">将外发至您自定义域名（如 00571.top）的邮件全部引流至我们的 Worker 中处理。</p>
+
+      <ol class="action-list">
+        <li>在 Cloudflare 左侧菜单点击 <strong>网站 (Websites)</strong> ➔ 点击您的域名：<span class="tag">00571.top</span>；</li>
+        <li>在域名的左侧菜单中找到 <strong>「电子邮件 (Email Routing)」</strong>：
+          <ul style="padding-left: 1.5rem; margin-top: 0.5rem; line-height: 1.8;">
+            <li>如果未开启，按照页面提示点击开启，Cloudflare 会引导一键添加 MX 解析记录与 SPF 防伪记录；</li>
+          </ul>
+        </li>
+        <li>切换到 <strong>「路由规则 (Routing Rules)」</strong> 标签页：
+          <ul style="padding-left: 1.5rem; margin-top: 0.5rem; line-height: 1.8;">
+            <li>找到 <strong>全部捕获 (Catch-all)</strong> 规则卡片，点击右侧的 <strong>「编辑」</strong>；</li>
+            <li>操作 (Action) 选择：<strong>发送到 Worker (Send to Worker)</strong>；</li>
+            <li>目标 Worker 选择刚刚部署的：<span class="tag">cfmail</span>；</li>
+            <li>点击 <strong>保存并启用</strong>！</li>
+          </ul>
+        </li>
+      </ol>
+      <div class="alert-box alert-success">
+        至此，外部任何人向 <code>admin@00571.top</code> 或 <code>任意前缀@00571.top</code> 发送邮件，全都会 100% 自动实时写入您的收件箱！
+      </div>
+    </div>
+
+    <!-- 第五步：注册管理员账号与发信配置 -->
+    <div class="step-card">
+      <span class="step-badge">第五步</span>
+      <h2 class="step-title">首次注册管理员与配置发信 (Resend)</h2>
+      <p class="step-desc">系统首位注册的用户会自动成为最高系统管理员。</p>
+
+      <ol class="action-list">
+        <li>打开您的 Worker 网址（如 <code>https://cfmail.xzal520.workers.dev</code>）；</li>
+        <li>点击 <strong>「新用户注册」</strong>，输入用户名与密码，邮箱后缀默认即为 <code>@00571.top</code>；</li>
+        <li>注册成功后直接登录，进入现代化邮件收发客户端界面；</li>
+        <li>点击顶部导航栏右上角的 <strong>「管理后台」</strong> ➔ 切换到 <strong>「发信通道 & 设置」</strong>：
+          <ul style="padding-left: 1.5rem; margin-top: 0.5rem; line-height: 1.8;">
+            <li>免费注册 <a href="https://resend.com" target="_blank">Resend 官网</a> 并复制 API Key；</li>
+            <li>粘贴进 Resend API Key 输入框并点击保存；</li>
+            <li>在下方输入您的个人常用邮箱（如 QQ 或 163 邮箱），点击 <strong>「立即测试发信」</strong>，收到测试邮件即代表全链路彻底打通！</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+
+  </main>
+
+  <script>
+    function copyCode(elementId) {
+      const codeText = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(codeText).then(() => {
+        alert('代码已成功复制到剪贴板！');
+      }).catch(err => {
+        console.error('复制失败:', err);
+      });
+    }
+  </script>
+</body>
+</html>
