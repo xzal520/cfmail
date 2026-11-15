@@ -70,7 +70,30 @@ export async function handleEmail(
     // 提取主题、正文和摘要
     const subject = parsed.subject || '(无主题)';
     const bodyText = parsed.text || '';
-    const bodyHtml = parsed.html || (bodyText ? `<pre style="font-family: inherit; white-space: pre-wrap;">${bodyText}</pre>` : '');
+    let bodyHtml = parsed.html || (bodyText ? `<pre style="font-family: inherit; white-space: pre-wrap;">${bodyText}</pre>` : '');
+
+    // 自动处理 CID 内联图片：将邮件内嵌图片转为 Base64 Data URL，彻底解决内联图片裂开问题
+    if (parsed.attachments && parsed.attachments.length > 0 && bodyHtml) {
+      for (const att of parsed.attachments) {
+        if (att.contentId) {
+          const cleanCid = att.contentId.replace(/^<|>$/g, '').trim();
+          const mime = att.mimeType || 'image/png';
+          let bytes: Uint8Array = new Uint8Array(0);
+          if (typeof att.content === 'string') {
+            bytes = new TextEncoder().encode(att.content);
+          } else if (att.content) {
+            bytes = new Uint8Array(att.content);
+          }
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const dataUri = `data:${mime};base64,${btoa(binary)}`;
+          bodyHtml = bodyHtml.replaceAll(`cid:${cleanCid}`, dataUri);
+        }
+      }
+    }
+
     const snippet = (bodyText || subject).slice(0, 150).replace(/\s+/g, ' ').trim();
 
     // 整理收发件人信息

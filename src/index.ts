@@ -25,6 +25,56 @@ app.get('/api/health', (c) => {
   return c.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// 2.1 邮件外部图片加速与防盗链代理接口 (Image Proxy)
+app.get('/api/proxy-image', async (c) => {
+  const targetUrl = c.req.query('url');
+  if (!targetUrl) return c.text('Missing url parameter', 400);
+
+  try {
+    const parsed = new URL(targetUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return c.text('Invalid protocol', 400);
+    }
+
+    // 防 SSRF：禁止访问私有内网地址
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname.startsWith('127.') ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('192.168.') ||
+      hostname.endsWith('.internal') ||
+      hostname.endsWith('.local')
+    ) {
+      return c.text('Forbidden destination', 403);
+    }
+
+    const imageRes = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      },
+    });
+
+    if (!imageRes.ok) {
+      return c.text(`Image fetch failed with status: ${imageRes.status}`, 502);
+    }
+
+    const contentType = imageRes.headers.get('content-type') || 'image/png';
+    const body = await imageRes.arrayBuffer();
+
+    return new Response(body, {
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=604800, immutable',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (err: unknown) {
+    return c.text(err instanceof Error ? err.message : 'Image proxy error', 500);
+  }
+});
+
 // 3. 挂载业务路由
 app.route('/api/auth', authRouter);
 app.route('/api/mailboxes', mailboxRouter);

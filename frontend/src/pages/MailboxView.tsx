@@ -29,6 +29,37 @@ interface MailboxViewProps {
   onRefreshUser: () => void;
 }
 
+// 将邮件 HTML 中的外部图片转为内置代理，解决网络阻断（如 Claude/国外图片）与防盗链问题
+function processEmailHtml(rawHtml: string): string {
+  if (!rawHtml) return '';
+  let processed = rawHtml;
+
+  // 1. 替换 <img src="..."> 为内置图片加速代理
+  processed = processed.replace(
+    /<img\b([^>]*?)\bsrc=(["']?)(https?:\/\/[^"'\s>]+)\2([^>]*?)>/gi,
+    (match, before, quote, url, after) => {
+      if (url.includes('/api/proxy-image') || url.startsWith('data:')) {
+        return match;
+      }
+      const q = quote || '"';
+      const proxiedUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+      return `<img${before}src=${q}${proxiedUrl}${q} referrerpolicy="no-referrer"${after}>`;
+    }
+  );
+
+  // 2. 替换 background="..." 属性
+  processed = processed.replace(
+    /\bbackground=(["']?)(https?:\/\/[^"'\s>]+)\1/gi,
+    (match, quote, url) => {
+      if (url.includes('/api/proxy-image') || url.startsWith('data:')) return match;
+      const q = quote || '"';
+      return `background=${q}/api/proxy-image?url=${encodeURIComponent(url)}${q}`;
+    }
+  );
+
+  return processed;
+}
+
 export const MailboxView: React.FC<MailboxViewProps> = ({ user, onRefreshUser }) => {
   const [activeFolder, setActiveFolder] = useState<'inbox' | 'sent' | 'starred' | 'trash'>('inbox');
   const [selectedMailboxId, setSelectedMailboxId] = useState<string>(''); // 空表示全部
@@ -625,6 +656,8 @@ export const MailboxView: React.FC<MailboxViewProps> = ({ user, onRefreshUser })
                       <html>
                         <head>
                           <meta charset="utf-8">
+                          <meta name="referrer" content="no-referrer">
+                          <base target="_blank">
                           <style>
                             body {
                               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -638,7 +671,7 @@ export const MailboxView: React.FC<MailboxViewProps> = ({ user, onRefreshUser })
                             img { max-width: 100%; height: auto; }
                           </style>
                         </head>
-                        <body>${emailDetail.body_html}</body>
+                        <body>${processEmailHtml(emailDetail.body_html)}</body>
                       </html>
                     `}
                     title="Email Body"
